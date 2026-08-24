@@ -61,6 +61,31 @@ function detectPlatform(url) {
     }
 }
 
+function isDirectVideoUrl(url) {
+
+    try {
+
+        const clean =
+            url
+                .split("?")[0]
+                .split("#")[0]
+                .toLowerCase();
+
+        return (
+            clean.endsWith(".mp4") ||
+            clean.endsWith(".webm") ||
+            clean.endsWith(".mov") ||
+            clean.endsWith(".mkv") ||
+            clean.endsWith(".m4v") ||
+            clean.endsWith(".3gp")
+        );
+
+    } catch (error) {
+
+        return false;
+    }
+}
+
 app.post("/api/resolve", (req, res) => {
 
     const url = req.body.url;
@@ -76,10 +101,31 @@ app.post("/api/resolve", (req, res) => {
         });
     }
 
-    const platform =
-        detectPlatform(url);
+    const trimmedUrl =
+        url.trim();
 
-    if (platform === "Unknown") {
+    if (
+        isDirectVideoUrl(
+            trimmedUrl
+        )
+    ) {
+
+        return res.json({
+            success: true,
+            platform: "Direct",
+            title: "VIDDrop Video",
+            mediaUrl: trimmedUrl
+        });
+    }
+
+    const platform =
+        detectPlatform(
+            trimmedUrl
+        );
+
+    if (
+        platform === "Unknown"
+    ) {
 
         return res.status(400).json({
             success: false,
@@ -87,22 +133,12 @@ app.post("/api/resolve", (req, res) => {
         });
     }
 
-    /*
-     * This endpoint currently identifies
-     * the platform only.
-     *
-     * It does NOT convert social-media
-     * webpages into downloadable videos.
-     */
-
-    res.json({
-        success: true,
+    return res.json({
+        success: false,
         platform: platform,
-        title: "VIDDrop Media",
-        mediaUrl: url,
         message:
             platform +
-            " URL detected successfully"
+            " URL detected, but a permitted media source/API is required to obtain a downloadable video."
     });
 });
 
