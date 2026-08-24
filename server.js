@@ -4,6 +4,14 @@ const app = express();
 
 app.use(express.json());
 
+const YOUTUBE_API_KEY =
+    process.env.YOUTUBE_API_KEY;
+
+
+/*
+ * Detect social platform
+ */
+
 function detectPlatform(url) {
 
     try {
@@ -52,53 +60,201 @@ function detectPlatform(url) {
     }
 }
 
+
+/*
+ * Check direct video URL
+ */
+
 function isDirectVideoUrl(url) {
+
+    const clean =
+        url
+            .split("?")[0]
+            .split("#")[0]
+            .toLowerCase();
+
+    return (
+        clean.endsWith(".mp4") ||
+        clean.endsWith(".webm") ||
+        clean.endsWith(".mov") ||
+        clean.endsWith(".mkv") ||
+        clean.endsWith(".m4v") ||
+        clean.endsWith(".3gp")
+    );
+}
+
+
+/*
+ * Get YouTube video ID
+ */
+
+function getYouTubeVideoId(url) {
 
     try {
 
-        const clean =
-            url
-                .split("?")[0]
-                .split("#")[0]
-                .toLowerCase();
+        const parsed =
+            new URL(url);
 
-        return (
-            clean.endsWith(".mp4") ||
-            clean.endsWith(".webm") ||
-            clean.endsWith(".mov") ||
-            clean.endsWith(".mkv") ||
-            clean.endsWith(".m4v") ||
-            clean.endsWith(".3gp")
-        );
+        const host =
+            parsed.hostname
+                .toLowerCase()
+                .replace(/^www\./, "");
+
+
+        /*
+         * youtube.com/watch?v=VIDEO_ID
+         */
+
+        if (
+            host === "youtube.com" ||
+            host.endsWith(".youtube.com")
+        ) {
+
+            const id =
+                parsed.searchParams.get("v");
+
+            if (id) {
+                return id;
+            }
+
+
+            /*
+             * youtube.com/shorts/VIDEO_ID
+             */
+
+            const parts =
+                parsed.pathname
+                    .split("/")
+                    .filter(Boolean);
+
+            const shortsIndex =
+                parts.indexOf("shorts");
+
+            if (
+                shortsIndex !== -1 &&
+                parts[shortsIndex + 1]
+            ) {
+                return parts[shortsIndex + 1];
+            }
+        }
+
+
+        /*
+         * youtu.be/VIDEO_ID
+         */
+
+        if (
+            host === "youtu.be"
+        ) {
+
+            const id =
+                parsed.pathname
+                    .split("/")
+                    .filter(Boolean)[0];
+
+            if (id) {
+                return id;
+            }
+        }
+
+        return null;
 
     } catch (error) {
 
-        return false;
+        return null;
     }
 }
 
 
 /*
- * Provider placeholder.
- *
- * This function intentionally does not
- * bypass platform restrictions.
- *
- * Later, an authorized provider/API can
- * be connected here.
+ * YouTube metadata
  */
 
-async function resolveWithProvider(
-    platform,
-    url
-) {
+async function getYouTubeMetadata(url) {
 
-    return {
-        success: false,
-        platform: platform,
-        message:
-            "No authorized media provider is configured yet."
-    };
+    if (!YOUTUBE_API_KEY) {
+
+        return {
+            success: false,
+            message:
+                "YouTube API key is not configured on the server."
+        };
+    }
+
+    const videoId =
+        getYouTubeVideoId(url);
+
+    if (!videoId) {
+
+        return {
+            success: false,
+            message:
+                "Could not find a YouTube video ID."
+        };
+    }
+
+    try {
+
+        const apiUrl =
+            "https://www.googleapis.com/youtube/v3/videos" +
+            "?part=snippet" +
+            "&id=" +
+            encodeURIComponent(videoId) +
+            "&key=" +
+            encodeURIComponent(YOUTUBE_API_KEY);
+
+        const response =
+            await fetch(apiUrl);
+
+        const data =
+            await response.json();
+
+        if (!response.ok) {
+
+            return {
+                success: false,
+                message:
+                    data?.error?.message ||
+                    "YouTube API request failed."
+            };
+        }
+
+        if (
+            !data.items ||
+            data.items.length === 0
+        ) {
+
+            return {
+                success: false,
+                message:
+                    "YouTube video was not found."
+            };
+        }
+
+        const snippet =
+            data.items[0].snippet;
+
+        return {
+            success: true,
+            platform: "youtube",
+            title:
+                snippet.title ||
+                "YouTube Video",
+            thumbnail:
+                snippet.thumbnails?.high?.url ||
+                snippet.thumbnails?.default?.url ||
+                "",
+            videoId: videoId
+        };
+
+    } catch (error) {
+
+        return {
+            success: false,
+            message:
+                "Unable to contact YouTube API."
+        };
+    }
 }
 
 
@@ -110,7 +266,8 @@ app.get("/", (req, res) => {
 
     res.json({
         success: true,
-        message: "VIDDrop server is running"
+        message:
+            "VIDDrop server is running"
     });
 });
 
@@ -130,7 +287,8 @@ app.post("/api/resolve", async (req, res) => {
 
         return res.status(400).json({
             success: false,
-            message: "URL is required"
+            message:
+                "URL is required"
         });
     }
 
@@ -150,7 +308,7 @@ app.post("/api/resolve", async (req, res) => {
 
 
     /*
-     * Direct video
+     * Direct MP4
      */
 
     if (
@@ -167,35 +325,53 @@ app.post("/api/resolve", async (req, res) => {
 
 
     /*
-     * Social platform
+     * Detect platform
      */
 
     const platform =
         detectPlatform(cleanUrl);
 
+
     if (
-        platform === "unknown" ||
-        platform === "invalid"
+        platform === "invalid" ||
+        platform === "unknown"
     ) {
 
         return res.status(400).json({
             success: false,
-            message: "Unsupported URL"
+            message:
+                "Unsupported URL"
         });
     }
 
 
     /*
-     * Send the URL to the provider layer.
+     * YouTube metadata
      */
 
-    const result =
-        await resolveWithProvider(
-            platform,
-            cleanUrl
-        );
+    if (
+        platform === "youtube"
+    ) {
 
-    return res.json(result);
+        const result =
+            await getYouTubeMetadata(
+                cleanUrl
+            );
+
+        return res.json(result);
+    }
+
+
+    /*
+     * Other platforms
+     */
+
+    return res.json({
+        success: false,
+        platform: platform,
+        message:
+            "Platform detected. An authorized media provider is required."
+    });
 });
 
 
@@ -213,6 +389,5 @@ app.listen(
         console.log(
             `VIDDrop server running on port ${PORT}`
         );
-
     }
 );
