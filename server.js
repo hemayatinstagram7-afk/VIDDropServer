@@ -4,45 +4,33 @@ const app = express();
 
 app.use(express.json());
 
-app.get("/", (req, res) => {
-    res.json({
-        success: true,
-        message: "VIDDrop server is running"
-    });
-});
-
 function detectPlatform(url) {
-
     try {
-
-        const parsed =
-            new URL(url);
-
-        const host =
-            parsed.hostname
-                .toLowerCase()
-                .replace(/^www\./, "");
+        const host = new URL(url)
+            .hostname
+            .toLowerCase()
+            .replace(/^www\./, "");
 
         if (
             host === "youtube.com" ||
             host.endsWith(".youtube.com") ||
             host === "youtu.be"
         ) {
-            return "YouTube";
+            return "youtube";
         }
 
         if (
             host === "tiktok.com" ||
             host.endsWith(".tiktok.com")
         ) {
-            return "TikTok";
+            return "tiktok";
         }
 
         if (
             host === "instagram.com" ||
             host.endsWith(".instagram.com")
         ) {
-            return "Instagram";
+            return "instagram";
         }
 
         if (
@@ -50,41 +38,38 @@ function detectPlatform(url) {
             host.endsWith(".facebook.com") ||
             host === "fb.watch"
         ) {
-            return "Facebook";
+            return "facebook";
         }
 
-        return "Unknown";
+        return "unknown";
 
     } catch (error) {
-
-        return "Unknown";
+        return "unknown";
     }
 }
 
 function isDirectVideoUrl(url) {
+    const clean = url
+        .split("?")[0]
+        .split("#")[0]
+        .toLowerCase();
 
-    try {
-
-        const clean =
-            url
-                .split("?")[0]
-                .split("#")[0]
-                .toLowerCase();
-
-        return (
-            clean.endsWith(".mp4") ||
-            clean.endsWith(".webm") ||
-            clean.endsWith(".mov") ||
-            clean.endsWith(".mkv") ||
-            clean.endsWith(".m4v") ||
-            clean.endsWith(".3gp")
-        );
-
-    } catch (error) {
-
-        return false;
-    }
+    return (
+        clean.endsWith(".mp4") ||
+        clean.endsWith(".webm") ||
+        clean.endsWith(".mov") ||
+        clean.endsWith(".mkv") ||
+        clean.endsWith(".m4v") ||
+        clean.endsWith(".3gp")
+    );
 }
+
+app.get("/", (req, res) => {
+    res.json({
+        success: true,
+        message: "VIDDrop server is running"
+    });
+});
 
 app.post("/api/resolve", (req, res) => {
 
@@ -94,39 +79,33 @@ app.post("/api/resolve", (req, res) => {
         !url ||
         typeof url !== "string"
     ) {
-
         return res.status(400).json({
             success: false,
             message: "URL is required"
         });
     }
 
-    const trimmedUrl =
-        url.trim();
+    const cleanUrl = url.trim();
 
-    if (
-        isDirectVideoUrl(
-            trimmedUrl
-        )
-    ) {
-
-        return res.json({
-            success: true,
-            platform: "Direct",
-            title: "VIDDrop Video",
-            mediaUrl: trimmedUrl
+    if (!/^https?:\/\//i.test(cleanUrl)) {
+        return res.status(400).json({
+            success: false,
+            message: "Only HTTP/HTTPS URLs are supported"
         });
     }
 
-    const platform =
-        detectPlatform(
-            trimmedUrl
-        );
+    if (isDirectVideoUrl(cleanUrl)) {
+        return res.json({
+            success: true,
+            platform: "direct",
+            title: "VIDDrop Video",
+            mediaUrl: cleanUrl
+        });
+    }
 
-    if (
-        platform === "Unknown"
-    ) {
+    const platform = detectPlatform(cleanUrl);
 
+    if (platform === "unknown") {
         return res.status(400).json({
             success: false,
             message: "Unsupported URL"
@@ -137,19 +116,15 @@ app.post("/api/resolve", (req, res) => {
         success: false,
         platform: platform,
         message:
-            platform +
-            " URL detected, but a permitted media source/API is required to obtain a downloadable video."
+            "This platform was detected. An authorized media provider is required before VIDDrop can download this media."
     });
 });
 
 const PORT =
     process.env.PORT || 3000;
 
-app.listen(
-    PORT,
-    () => {
-        console.log(
-            `VIDDrop server running on port ${PORT}`
-        );
-    }
-);
+app.listen(PORT, () => {
+    console.log(
+        `VIDDrop server running on port ${PORT}`
+    );
+});
