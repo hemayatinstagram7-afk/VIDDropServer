@@ -100,11 +100,6 @@ function getYouTubeVideoId(url) {
                 .toLowerCase()
                 .replace(/^www\./, "");
 
-
-        /*
-         * youtube.com/watch?v=VIDEO_ID
-         */
-
         if (
             host === "youtube.com" ||
             host.endsWith(".youtube.com")
@@ -116,11 +111,6 @@ function getYouTubeVideoId(url) {
             if (id) {
                 return id;
             }
-
-
-            /*
-             * youtube.com/shorts/VIDEO_ID
-             */
 
             const parts =
                 parsed.pathname
@@ -134,14 +124,10 @@ function getYouTubeVideoId(url) {
                 shortsIndex !== -1 &&
                 parts[shortsIndex + 1]
             ) {
+
                 return parts[shortsIndex + 1];
             }
         }
-
-
-        /*
-         * youtu.be/VIDEO_ID
-         */
 
         if (
             host === "youtu.be"
@@ -176,6 +162,7 @@ async function getYouTubeMetadata(url) {
 
         return {
             success: false,
+            platform: "youtube",
             message:
                 "YouTube API key is not configured on the server."
         };
@@ -188,6 +175,7 @@ async function getYouTubeMetadata(url) {
 
         return {
             success: false,
+            platform: "youtube",
             message:
                 "Could not find a YouTube video ID."
         };
@@ -213,6 +201,7 @@ async function getYouTubeMetadata(url) {
 
             return {
                 success: false,
+                platform: "youtube",
                 message:
                     data?.error?.message ||
                     "YouTube API request failed."
@@ -226,6 +215,7 @@ async function getYouTubeMetadata(url) {
 
             return {
                 success: false,
+                platform: "youtube",
                 message:
                     "YouTube video was not found."
             };
@@ -244,17 +234,46 @@ async function getYouTubeMetadata(url) {
                 snippet.thumbnails?.high?.url ||
                 snippet.thumbnails?.default?.url ||
                 "",
-            videoId: videoId
+            videoId: videoId,
+            mediaUrl: ""
         };
 
     } catch (error) {
 
         return {
             success: false,
+            platform: "youtube",
             message:
                 "Unable to contact YouTube API."
         };
     }
+}
+
+
+/*
+ * Generic social-platform response
+ */
+
+function socialPlatformResponse(
+    platform,
+    url
+) {
+
+    return {
+        success: true,
+        platform: platform,
+        title:
+            platform.charAt(0).toUpperCase() +
+            platform.slice(1) +
+            " Media",
+        thumbnail: "",
+        videoId: "",
+        mediaUrl: "",
+        sourceUrl: url,
+        downloadable: false,
+        message:
+            "Platform detected. An authorized media provider is required for media downloading."
+    };
 }
 
 
@@ -273,12 +292,45 @@ app.get("/", (req, res) => {
 
 
 /*
+ * Platform test endpoint
+ */
+
+app.get("/api/test-platform", (req, res) => {
+
+    const url =
+        req.query.url;
+
+    if (
+        !url ||
+        typeof url !== "string"
+    ) {
+
+        return res.status(400).json({
+            success: false,
+            message:
+                "Use ?url=YOUR_URL"
+        });
+    }
+
+    const platform =
+        detectPlatform(url);
+
+    res.json({
+        success: true,
+        platform: platform,
+        url: url
+    });
+});
+
+
+/*
  * Main resolver
  */
 
 app.post("/api/resolve", async (req, res) => {
 
-    const url = req.body.url;
+    const url =
+        req.body.url;
 
     if (
         !url ||
@@ -316,10 +368,22 @@ app.post("/api/resolve", async (req, res) => {
     ) {
 
         return res.json({
+
             success: true,
+
             platform: "direct",
-            title: "VIDDrop Video",
-            mediaUrl: cleanUrl
+
+            title:
+                "VIDDrop Video",
+
+            mediaUrl:
+                cleanUrl,
+
+            thumbnail: "",
+
+            videoId: "",
+
+            downloadable: true
         });
     }
 
@@ -338,7 +402,9 @@ app.post("/api/resolve", async (req, res) => {
     ) {
 
         return res.status(400).json({
+
             success: false,
+
             message:
                 "Unsupported URL"
         });
@@ -346,7 +412,7 @@ app.post("/api/resolve", async (req, res) => {
 
 
     /*
-     * YouTube metadata
+     * YouTube
      */
 
     if (
@@ -363,14 +429,62 @@ app.post("/api/resolve", async (req, res) => {
 
 
     /*
-     * Other platforms
+     * TikTok
      */
 
-    return res.json({
+    if (
+        platform === "tiktok"
+    ) {
+
+        return res.json(
+            socialPlatformResponse(
+                "tiktok",
+                cleanUrl
+            )
+        );
+    }
+
+
+    /*
+     * Instagram
+     */
+
+    if (
+        platform === "instagram"
+    ) {
+
+        return res.json(
+            socialPlatformResponse(
+                "instagram",
+                cleanUrl
+            )
+        );
+    }
+
+
+    /*
+     * Facebook
+     */
+
+    if (
+        platform === "facebook"
+    ) {
+
+        return res.json(
+            socialPlatformResponse(
+                "facebook",
+                cleanUrl
+            )
+        );
+    }
+
+
+    return res.status(400).json({
+
         success: false,
-        platform: platform,
+
         message:
-            "Platform detected. An authorized media provider is required."
+            "Unsupported platform"
     });
 });
 
