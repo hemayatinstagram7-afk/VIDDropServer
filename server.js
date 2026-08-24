@@ -79,6 +79,30 @@ function isDirectVideoUrl(url) {
 
 
 /*
+ * Provider placeholder.
+ *
+ * This function intentionally does not
+ * bypass platform restrictions.
+ *
+ * Later, an authorized provider/API can
+ * be connected here.
+ */
+
+async function resolveWithProvider(
+    platform,
+    url
+) {
+
+    return {
+        success: false,
+        platform: platform,
+        message:
+            "No authorized media provider is configured yet."
+    };
+}
+
+
+/*
  * Server status
  */
 
@@ -95,7 +119,7 @@ app.get("/", (req, res) => {
  * Main resolver
  */
 
-app.post("/api/resolve", (req, res) => {
+app.post("/api/resolve", async (req, res) => {
 
     const url = req.body.url;
 
@@ -126,7 +150,7 @@ app.post("/api/resolve", (req, res) => {
 
 
     /*
-     * Direct video URL
+     * Direct video
      */
 
     if (
@@ -143,7 +167,7 @@ app.post("/api/resolve", (req, res) => {
 
 
     /*
-     * Detect social platform
+     * Social platform
      */
 
     const platform =
@@ -162,19 +186,16 @@ app.post("/api/resolve", (req, res) => {
 
 
     /*
-     * Social media detected.
-     *
-     * We don't return the webpage URL
-     * as mediaUrl because it is not an
-     * actual video file.
+     * Send the URL to the provider layer.
      */
 
-    return res.json({
-        success: false,
-        platform: platform,
-        message:
-            "Platform detected. An authorized media provider is required."
-    });
+    const result =
+        await resolveWithProvider(
+            platform,
+            cleanUrl
+        );
+
+    return res.json(result);
 });
 
 
