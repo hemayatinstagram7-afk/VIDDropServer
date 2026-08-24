@@ -79,7 +79,7 @@ function isDirectVideoUrl(url) {
 
 
 /*
- * Main server test
+ * Server status
  */
 
 app.get("/", (req, res) => {
@@ -92,37 +92,7 @@ app.get("/", (req, res) => {
 
 
 /*
- * TEMPORARY browser test endpoint
- *
- * Example:
- * /api/test?url=https://www.youtube.com/watch?v=test
- */
-
-app.get("/api/test", (req, res) => {
-
-    const url = req.query.url;
-
-    if (!url) {
-
-        return res.status(400).json({
-            success: false,
-            message: "Add ?url=YOUR_URL"
-        });
-    }
-
-    const platform =
-        detectPlatform(url);
-
-    res.json({
-        success: true,
-        detectedPlatform: platform,
-        url: url
-    });
-});
-
-
-/*
- * Main resolver endpoint
+ * Main resolver
  */
 
 app.post("/api/resolve", (req, res) => {
@@ -156,7 +126,7 @@ app.post("/api/resolve", (req, res) => {
 
 
     /*
-     * Direct MP4/video URL
+     * Direct video URL
      */
 
     if (
@@ -173,7 +143,7 @@ app.post("/api/resolve", (req, res) => {
 
 
     /*
-     * Social platform detection
+     * Detect social platform
      */
 
     const platform =
@@ -193,7 +163,10 @@ app.post("/api/resolve", (req, res) => {
 
     /*
      * Social media detected.
-     * No media downloading is performed here.
+     *
+     * We don't return the webpage URL
+     * as mediaUrl because it is not an
+     * actual video file.
      */
 
     return res.json({
